@@ -1,20 +1,20 @@
 {
-  "name": "twilio-media-streams-live-transcription",
+  "name": "voice",
   "version": "1.0.0",
-  "description": "",
+  "description": "With Twilio Media Streams, you can now extend the capabilities of your Twilio-powered voice application with real time access to the raw audio stream of phone calls. For example, we can build tools that transcribe the speech from a phone call live into a browser window, run sentiment analysis of the speech on a phone call or even use voice biometrics to identify individuals.",
   "main": "index.js",
   "dependencies": {
+    "@deepgram/sdk": "^3.1.9",
     "@google-cloud/speech": "^3.2.6",
-    "dotenv": "^8.1.0",
+    "dotenv": "^8.6.0",
     "express": "^4.17.1",
     "websocket": "^1.0.29",
     "ws": "^7.4.6"
   },
-  "devDependencies": {},
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node index.js"
   },
-  "author": "Nathaniel Okenwa",
+  "author": "Vamsi Krishna",
   "license": "ISC"
 }

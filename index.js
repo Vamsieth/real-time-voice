@@ -1,73 +1,66 @@
-const WebSocket = require("ws");
 const express = require("express");
 const app = express();
 const server = require("http").createServer(app);
-const wss = new WebSocket.Server({ server });
 
-const path = require("path");
+const WebSocketServer = require("ws");
+const { createClient, LiveTranscriptionEvents } = require("@deepgram/sdk");
+const websocketServer = new WebSocketServer.Server({ server });
 
 require("dotenv").config();
+const deepgramApiKey = process.env.DEEPGRAM_API_KEY;
 
-//Include Google Speech to Text
-const speech = require("@google-cloud/speech");
-const client = new speech.SpeechClient();
+websocketServer.on("connection", (ws) => {
+  console.log("new client connected");
 
-//Configure Transcription Request
-const request = {
-  config: {
-    encoding: "MULAW",
-    sampleRateHertz: 8000,
-    languageCode: "en-GB",
-  },
-  interimResults: true, // If you want interim results, set this to true
-};
+  const deepgram = createClient(deepgramApiKey);
+  const connection = deepgram.listen.live({
+    model: "nova-2",
+    smart_format: true,
+    encoding: "mulaw",
+    sample_rate: 8000,
+    channels: 1,
+  });
 
-wss.on("connection", function connection(ws) {
-  console.log("New Connection Initiated");
+  connection.on(LiveTranscriptionEvents.Open, () => {
+    connection.on(LiveTranscriptionEvents.Close, () => {
+      console.log("Connection closed.");
+    });
 
-  let recognizeStream = null;
+    connection.on(LiveTranscriptionEvents.Transcript, (data) => {
+      console.log(data.channel.alternatives[0].transcript)
+    });
 
-  ws.on("message", function incoming(message) {
-    const msg = JSON.parse(message);
-    switch (msg.event) {
-      case "connected":
-        console.log(`A new call has connected.`);
-        break;
-      case "start":
-        console.log(`Starting Media Stream ${msg.streamSid}`);
-        // Create Stream to the Google Speech to Text API
-        recognizeStream = client
-          .streamingRecognize(request)
-          .on("error", console.error)
-          .on("data", (data) => {
-            console.log(data.results[0].alternatives[0].transcript);
-            wss.clients.forEach((client) => {
-              if (client.readyState === WebSocket.OPEN) {
-                client.send(
-                  JSON.stringify({
-                    event: "interim-transcription",
-                    text: data.results[0].alternatives[0].transcript,
-                  })
-                );
-              }
-            });
-          });
-        break;
-      case "media":
-        // Write Media Packets to the recognize stream
-        recognizeStream.write(msg.media.payload);
-        break;
-      case "stop":
-        console.log(`Call Has Ended`);
-        recognizeStream.destroy();
-        break;
-    }
+    ws.on("message", (data) => {
+      const twilioMessage = JSON.parse(data);
+      if (
+        twilioMessage["event"] === "connected" ||
+        twilioMessage["event"] === "start"
+      ) {
+        console.log("received a twilio connected or start event");
+      }
+      if (twilioMessage["event"] === "media") {
+        const media = twilioMessage["media"];
+        const audio = Buffer.from(media["payload"], "base64");
+        connection.send(audio);
+      }
+    });
+
+    ws.on("close", () => {
+      console.log("client has disconnected");
+      if (connection) {
+        connection.finish();
+      }
+    });
+
+    ws.onerror = function () {
+      console.log("some error occurred");
+      connection.finish();
+    };
   });
 });
 
 app.use(express.static("public"));
 
-app.get("/", (req, res) => res.sendFile(path.join(__dirname, "/index.html")));
 
 app.post("/", (req, res) => {
   res.set("Content-Type", "text/xml");
